@@ -23,17 +23,18 @@ def predict_image(model, image, conf_threshold, iou_threshold):
         image,
         conf=conf_threshold,
         iou=iou_threshold,
-        device='cpu',
+        device='mps',
     )
     
     class_name = model.model.names
     classes = res[0].boxes.cls
     class_counts = {}
-    
+    total_count=0
     # Count the number of occurrences for each class
     for c in classes:
         c = int(c)
         class_counts[class_name[c]] = class_counts.get(class_name[c], 0) + 1
+        total_count+=1
 
     # Generate prediction text
     prediction_text = 'Predicted '
@@ -52,13 +53,13 @@ def predict_image(model, image, conf_threshold, iou_threshold):
     # Calculate inference latency
     latency = sum(res[0].speed.values())  # in ms, need to convert to seconds
     latency = round(latency / 1000, 2)
-    prediction_text += f' in {latency} seconds.'
+    prediction_text += f' in {latency} seconds. Total objects detected: {total_count}'
 
     # Convert the result image to RGB
     res_image = res[0].plot()
     res_image = cv2.cvtColor(res_image, cv2.COLOR_BGR2RGB)
     
-    return res_image, prediction_text
+    return res_image, prediction_text,total_count
 
 def main():
     # Set Streamlit page configuration
@@ -146,7 +147,7 @@ def main():
     model_files = [f.replace(".pt", "") for f in os.listdir(models_dir) if f.endswith(".pt")]
     
     with col2:
-        selected_model = st.selectbox("Select Model Size", sorted(model_files), index=2)
+        selected_model = st.selectbox("Select Model Size", sorted(model_files), index=0)
 
     # Model and general info
     col1, col2 = st.columns(2)
@@ -227,7 +228,9 @@ def main():
     if image:
         # Display the uploaded image
         with st.spinner("Detecting"):
-            prediction, text = predict_image(model, image, conf_threshold, iou_threshold)
+            prediction, text, total_count = predict_image(model, image, conf_threshold, iou_threshold)
+            if total_count == 0:
+                prediction, text, total_count = predict_image(model, image.rotate(180), conf_threshold, iou_threshold)
             st.image(prediction, caption="Prediction", use_column_width=True)
             st.success(text)
         
